@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Birikimce - Gelişmiş Fonksiyonel Simülasyon</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .nav-item.active svg, .nav-item.active span { color: #3b82f6; }
+        .hidden { display: none !important; }
+        .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid #3b82f6; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .stock-add-btn { transition: all 0.2s ease-in-out; }
+        .allocation-input:disabled { background-color: transparent; border-color: transparent; -webkit-appearance: none; -moz-appearance: textfield; }
+        .allocation-input { text-align: right; }
+        .notification { position: fixed; top: -100px; left: 50%; transform: translateX(-50%); transition: top 0.5s ease-in-out; z-index: 100; }
+        .notification.show { top: 20px; }
+        button:disabled { background-color: #9CA3AF; cursor: not-allowed; }
+        .step-indicator { height: 4px; background-color: #e5e7eb; transition: background-color 0.3s; }
+        .step-indicator.active { background-color: #3b82f6; }
+        .option-card { border: 2px solid #e5e7eb; transition: all 0.2s; }
+        .option-card.selected { border-color: #3b82f6; background-color: #eff6ff; }
+        .stock-item-clickable { cursor: pointer; }
+        #stock-detail-modal { transition: opacity 0.3s; }
+        .period-btn.active { background-color: #3b82f6; color: white; }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+    <div class="max-w-md w-full mx-auto bg-white shadow-lg rounded-lg h-screen flex flex-col relative overflow-hidden">
+        
+        <div id="notification-banner" class="notification bg-green-500 text-white text-sm font-bold px-4 py-3 rounded-lg shadow-lg">
+            <p id="notification-message"></p>
+        </div>
+
+        <!-- Auth Ekranı -->
+        <div id="auth-screen" class="flex flex-col items-center justify-center h-full p-8 space-y-6">
+            <svg class="w-16 h-16 text-green-500" viewBox="0 0 24 24"><path fill="currentColor" d="M12,3C7.58,3 4,4.79 4,7C4,9.21 7.58,11 12,11C16.42,11 20,9.21 20,7C20,4.79 16.42,3 12,3M4,8V10C4,12.21 7.58,14 12,14C16.42,14 20,12.21 20,10V8C20,10.21 16.42,12 12,12C7.58,12 4,10.21 4,8M4,11V13C4,15.21 7.58,17 12,17C16.42,17 20,15.21 20,13V11C20,13.21 16.42,15 12,15C7.58,15 4,13.21 4,11M4,14V16C4,18.21 7.58,20 12,20C16.42,20 20,18.21 20,16V14C20,16.21 16.42,18 12,18C7.58,18 4,16.21 4,14Z" /></svg>
+            <h1 class="text-3xl font-bold text-gray-800">Birikimce'ye Hoş Geldin!</h1>
+            <div id="auth-container" class="w-full">
+                <div id="login-form" class="w-full space-y-4">
+                    <input type="email" id="login-email" class="mt-1 block w-full px-3 py-3 bg-gray-100 border-transparent rounded-md" placeholder="E-posta Adresi">
+                    <button id="login-button" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm font-semibold text-white bg-blue-600 hover:bg-blue-700">E-posta ile Devam Et</button>
+                    <p class="text-center text-sm">Hesabın yok mu? <a href="#" id="show-register-flow" class="font-medium text-blue-600 hover:text-blue-500">Kayıt Ol</a></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Yeni Kayıt Akışı -->
+        <div id="onboarding-flow" class="h-full flex-col hidden">
+            <header class="p-4 border-b border-gray-200">
+                <div class="flex justify-between items-center mb-4">
+                    <button id="onboarding-back-btn" class="text-gray-600 hover:text-gray-900">&larr; Geri</button>
+                    <h2 id="onboarding-title" class="text-lg font-bold"></h2>
+                </div>
+                <div id="step-indicators" class="flex space-x-1"></div>
+            </header>
+            <main class="flex-grow p-6 overflow-y-auto">
+                <div id="step-1" class="onboarding-step space-y-4">
+                    <h3 class="text-2xl font-bold">Şifreni oluştur</h3>
+                    <p class="text-gray-600">Lütfen hesabın için güvenli bir şifre belirle.</p>
+                    <div>
+                        <label for="reg-password" class="block text-sm font-medium text-gray-700">Şifre</label>
+                        <input type="password" id="reg-password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="En az 8 karakter">
+                    </div>
+                </div>
+                <div id="step-2" class="onboarding-step space-y-4 hidden">
+                    <h3 class="text-2xl font-bold">Kimliğini Doğrula</h3>
+                    <p class="text-gray-600">Yatırım hesabını açabilmemiz için yasal olarak bu bilgilere ihtiyacımız var. Bilgilerin güvende.</p>
+                    <div>
+                        <label for="full-name" class="block text-sm font-medium text-gray-700">Ad Soyad</label>
+                        <input type="text" id="full-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Adınız Soyadınız">
+                    </div>
+                    <div>
+                        <label for="tc-kimlik" class="block text-sm font-medium text-gray-700">T.C. Kimlik Numarası</label>
+                        <input type="text" id="tc-kimlik" maxlength="11" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="11 haneli T.C. Kimlik Numaranız">
+                    </div>
+                </div>
+                <div id="step-3" class="onboarding-step space-y-4 hidden">
+                    <h3 class="text-2xl font-bold">Yatırım hedeflerin neler?</h3>
+                    <div class="space-y-3" id="goal-options">
+                        <div class="option-card p-4 rounded-lg cursor-pointer" data-value="growth"><p class="font-bold">Yatırım Büyümesi</p><p class="text-sm text-gray-600">Uzun vadeli düşünüyorum.</p></div>
+                        <div class="option-card p-4 rounded-lg cursor-pointer" data-value="balanced"><p class="font-bold">Dengeli Büyüme ve Risk</p><p class="text-sm text-gray-600">Orta vadede paramı kullanabilirim.</p></div>
+                        <div class="option-card p-4 rounded-lg cursor-pointer" data-value="conservative"><p class="font-bold">Düşük Risk ve Büyüme</p><p class="text-sm text-gray-600">Yakın zamanda paramı kullanabilirim.</p></div>
+                    </div>
+                </div>
+                <div id="step-4" class="onboarding-step space-y-4 hidden">
+                    <h3 class="text-2xl font-bold">Net varlığın ne kadar?</h3>
+                     <p class="text-sm text-gray-600">Bu, sana en uygun yolu belirlememize yardımcı olur. Tahmini bir rakam yeterlidir.</p>
+                    <div class="space-y-3" id="networth-options">
+                        <div class="option-card p-4 rounded-lg cursor-pointer" data-value="<100k">&lt; 100.000 TL</div>
+                        <div class="option-card p-4 rounded-lg cursor-pointer" data-value="100k-500k">100.000 - 500.000 TL</div>
+                        <div class="option-card p-4 rounded-lg cursor-pointer" data-value=">500k">500.000 TL +</div>
+                    </div>
+                </div>
+                <div id="step-5" class="onboarding-step space-y-6 text-center hidden">
+                     <div class="relative w-48 h-48 mx-auto flex items-center justify-center"><div class="loader"></div></div>
+                    <h2 class="text-2xl font-bold text-gray-800">Analiz ediliyor...</h2>
+                    <p class="text-gray-600">Cevaplarına göre sana özel bir portföy önerisi hazırlıyoruz.</p>
+                </div>
+                <div id="step-6" class="onboarding-step space-y-6 text-center hidden">
+                    <h2 class="text-2xl font-bold text-gray-800">Sana Özel Portföy Önerin</h2>
+                    <p class="text-gray-600">Cevaplarına ve hedeflerine göre, yatırımların aşağıdaki gibi çeşitlendirilecek.</p>
+                     <div class="relative w-48 h-48 mx-auto"><canvas id="recommendation-chart"></canvas></div>
+                    <div id="recommendation-details"></div>
+                </div>
+                 <div id="step-7" class="onboarding-step space-y-6 text-center hidden">
+                     <div class="relative w-48 h-48 mx-auto">
+                        <svg class="absolute text-gray-200" style="left: 50%; top: 50%; transform: translate(-50%, -50%); width: 80%; height: 80%;" viewBox="0 0 24 24"><path fill="currentColor" d="M11.5,1L2,6V8H21V6M16,10V17H19V10M2,22H21V19H2M10,10V17H13V10M4,10V17H7V10H4Z" /></svg>
+                        <svg class="absolute text-green-500" style="left: 10%; top: 20%; width: 20%; height: 20%;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <svg class="absolute text-green-500" style="right: 10%; top: 20%; width: 20%; height: 20%;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-800">Bankanı Bağla</h2>
+                    <p class="text-gray-600">Yuvarlama özelliğini aktif etmek ve yatırım yapmak için banka hesabını bağla.</p>
+                     <button id="connect-bank-btn" class="w-full p-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold">
+                        Bankamı Bağla ve Başla
+                    </button>
+                </div>
+            </main>
+            <footer class="p-4 border-t border-gray-200">
+                <button id="onboarding-next-btn" class="w-full py-3 bg-blue-600 text-white rounded-md font-semibold">İleri</button>
+            </footer>
+        </div>
+
+        <!-- Ana Uygulama Konteyneri -->
+        <div id="app-container" class="h-full flex-col hidden">
+            <header class="bg-white p-4 border-b border-gray-200 sticky top-0 z-10">
+                <h1 id="header-title" class="text-xl font-bold text-gray-800 text-center">Panel</h1>
+            </header>
+
+            <main class="flex-grow p-4 sm:p-6 overflow-y-auto pb-24">
+                <div id="panel-screen" class="space-y-6">
+                     <div>
+                        <h2 id="welcome-message" class="text-lg text-gray-600">Hoş geldin!</h2>
+                        <p id="total-assets" class="text-3xl font-bold text-gray-900">0.00 TL</p>
+                        <p id="portfolio-performance" class="text-sm font-medium"></p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-xl border">
+                        <h3 class="font-semibold text-gray-700 mb-2">Yuvarlama ile Yatırım Yap</h3>
+                        <div class="flex items-end space-x-2">
+                            <div class="flex-grow">
+                                <label for="sim-expense" class="text-xs font-medium">Harcama Tutarı (TL)</label>
+                                <input type="number" id="sim-expense" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded-md" placeholder="Örn: 42.50">
+                            </div>
+                            <button id="add-expense-btn" class="px-4 py-1.5 bg-blue-600 text-white rounded-md font-semibold">Ekle</button>
+                        </div>
+                    </div>
+                    <div id="allocation-container" class="bg-gray-50 p-4 rounded-xl border">
+                        <h3 id="allocation-title" class="font-semibold text-gray-700 mb-2 flex items-center">
+                            Otomatik Yatırım Dağılımı
+                            <svg id="edit-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-2 text-gray-400 cursor-pointer" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" />
+                            </svg>
+                        </h3>
+                        <div id="allocation-settings" class="space-y-2"></div>
+                        <div id="allocation-actions" class="mt-3 flex gap-2"></div>
+                    </div>
+                     <div>
+                        <h3 class="font-semibold text-gray-700 mb-2">Portföy Detayları</h3>
+                        <div id="portfolio-details" class="space-y-2"></div>
+                    </div>
+                     <div>
+                        <h3 class="font-semibold text-gray-700 mb-2">Son Hareketler</h3>
+                        <div id="recent-transaction-history" class="space-y-2"></div>
+                    </div>
+                </div>
+
+                <div id="borsa-screen" class="hidden space-y-4">
+                    <div id="stock-list" class="space-y-2"></div>
+                </div>
+                
+                <div id="history-screen" class="hidden space-y-4">
+                    <div id="full-transaction-history" class="space-y-2"></div>
+                </div>
+
+                <div id="profile-screen" class="hidden space-y-6">
+                     <h3 class="text-lg font-bold">Profil & Ayarlar</h3>
+                     <div>
+                        <label for="rounding-options" class="block text-sm font-medium text-gray-700">Yuvarlama Kuralı</label>
+                        <select id="rounding-options" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md">
+                            <option value="1">En Yakın 1 TL'ye Yuvarla</option>
+                            <option value="5">En Yakın 5 TL'ye Yuvarla</option>
+                            <option value="10">En Yakın 10 TL'ye Yuvarla</option>
+                            <option value="100">En Yakın 100 TL'ye Yuvarla</option>
+                        </select>
+                     </div>
+                     <div class="bg-gray-50 p-4 rounded-xl border">
+                        <h3 class="font-semibold text-gray-700 mb-2">Haftalık Yatırım</h3>
+                        <p class="text-xs text-gray-500 mb-2">Her hafta belirlediğiniz tutar otomatik olarak yatırım hedeflerinize aktarılır.</p>
+                        <div class="flex items-center space-x-2">
+                             <input type="number" id="recurring-amount" class="w-full px-2 py-1.5 border border-gray-300 rounded-md" placeholder="Tutar (TL)">
+                             <button id="set-recurring-btn" class="px-4 py-1.5 bg-blue-600 text-white rounded-md font-semibold">Ayarla</button>
+                        </div>
+                     </div>
+                     <button id="logout-button" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm font-medium text-white bg-red-600 hover:bg-red-700">Çıkış Yap</button>
+                </div>
+            </main>
+
+            <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-200 flex justify-around">
+                <a href="#" class="nav-item flex-1 flex flex-col items-center justify-center p-3 text-gray-500 active" data-target="panel-screen" data-title="Panel"><svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg><span class="text-xs font-medium">Panel</span></a>
+                <a href="#" class="nav-item flex-1 flex flex-col items-center justify-center p-3 text-gray-500" data-target="borsa-screen" data-title="Borsa"><svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg><span class="text-xs font-medium">Borsa</span></a>
+                <a href="#" class="nav-item flex-1 flex flex-col items-center justify-center p-3 text-gray-500" data-target="history-screen" data-title="Tüm Hareketler"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg><span class="text-xs font-medium">Hareketler</span></a>
+                <a href="#" class="nav-item flex-1 flex flex-col items-center justify-center p-3 text-gray-500" data-target="profile-screen" data-title="Profil"><svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg><span class="text-xs font-medium">Profil</span></a>
+            </nav>
+        </div>
+
+        <!-- YENİ: Hisse Senedi Detay Modalı -->
+        <div id="stock-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col h-auto">
+                <header class="p-4 border-b flex justify-between items-center">
+                    <div>
+                        <h2 id="modal-stock-code" class="text-xl font-bold"></h2>
+                        <p id="modal-stock-name" class="text-sm text-gray-500"></p>
+                    </div>
+                    <button id="modal-close-btn" class="text-3xl font-light text-gray-500 hover:text-gray-800">&times;</button>
+                </header>
+                <main class="p-4 space-y-4">
+                    <p id="modal-stock-price" class="text-3xl font-bold"></p>
+                    <div>
+                        <canvas id="stock-history-chart"></canvas>
+                    </div>
+                    <div id="chart-period-buttons" class="flex justify-center space-x-1 sm:space-x-2">
+                        <button data-period="1M" class="period-btn px-3 py-1 text-xs sm:text-sm rounded-md bg-gray-200">1A</button>
+                        <button data-period="1Y" class="period-btn px-3 py-1 text-xs sm:text-sm rounded-md bg-blue-500 text-white active">1Y</button>
+                        <button data-period="5Y" class="period-btn px-3 py-1 text-xs sm:text-sm rounded-md bg-gray-200">5Y</button>
+                        <button data-period="ALL" class="period-btn px-3 py-1 text-xs sm:text-sm rounded-md bg-gray-200">Tümü</button>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // --- DOM & State ---
+            const authScreen = document.getElementById('auth-screen');
+            const appContainer = document.getElementById('app-container');
+            const onboardingFlow = document.getElementById('onboarding-flow');
+            const stockDetailModal = document.getElementById('stock-detail-modal');
+
+            let userState = {};
+            let stockInterval = null;
+            let isAllocationEditing = false;
+            let currentOnboardingStep = 1;
+            const totalOnboardingSteps = 7;
+            let recommendationChart = null;
+            let stockHistoryChart = null; // Grafik için değişken
+            let currentModalStock = null; // Modal'da gösterilen hisse
+
+            const mockStocks = [
+                { code: 'USD/TRY', name: 'Dolar', price: 33.15, type: 'fx' },
+                { code: 'THYAO', name: 'Türk Hava Yolları', price: 305.25, type: 'stock' },
+                { code: 'EREGL', name: 'Ereğli Demir Çelik', price: 44.80, type: 'stock' },
+                { code: 'TUPRS', name: 'Tüpraş', price: 171.90, type: 'stock' },
+                { code: 'BIMAS', name: 'Bim Mağazalar', price: 531.00, type: 'stock' },
+                { code: 'KCHOL', name: 'Koç Holding', price: 248.50, type: 'stock' },
+                { code: 'ASELS', name: 'Aselsan', price: 61.50, type: 'stock' },
+                { code: 'GARAN', name: 'Garanti Bankası', price: 105.70, type: 'stock' },
+                { code: 'AKBNK', name: 'Akbank', price: 65.25, type: 'stock' },
+                { code: 'ISCTR', name: 'İş Bankası (C)', price: 16.45, type: 'stock' },
+                { code: 'YKBNK', name: 'Yapı Kredi Bankası', price: 34.10, type: 'stock' },
+                { code: 'SAHOL', name: 'Sabancı Holding', price: 98.20, type: 'stock' },
+                { code: 'FROTO', name: 'Ford Otosan', price: 1120.00, type: 'stock' },
+                { code: 'TOASO', name: 'Tofaş', price: 345.50, type: 'stock' },
+                { code: 'ARCLK', name: 'Arçelik', price: 185.00, type: 'stock' },
+                { code: 'VESTL', name: 'Vestel', price: 22.80, type: 'stock' },
+                { code: 'PETKM', name: 'Petkim', price: 21.30, type: 'stock' },
+                { code: 'SASA', name: 'Sasa Polyester', price: 40.10, type: 'stock' },
+                { code: 'HEKTS', name: 'Hektaş', price: 18.50, type: 'stock' },
+                { code: 'PGSUS', name: 'Pegasus', price: 855.75, type: 'stock' },
+                { code: 'TCELL', name: 'Turkcell', price: 99.80, type: 'stock' },
+                { code: 'TTKOM', name: 'Türk Telekom', price: 38.60, type: 'stock' },
+                { code: 'SISE', name: 'Şişecam', price: 53.20, type: 'stock' },
+                { code: 'KOZAL', name: 'Koza Altın', price: 25.50, type: 'stock' },
+                { code: 'GUBRF', name: 'Gübre Fabrikaları', price: 220.40, type: 'stock' },
+                { code: 'MGROS', name: 'Migros', price: 480.00, type: 'stock' },
+                { code: 'SOKM', name: 'Şok Marketler', price: 75.10, type: 'stock' },
+                { code: 'ULKER', name: 'Ülker', price: 165.30, type: 'stock' },
+                { code: 'TAVHL', name: 'TAV Havalimanları', price: 240.80, type: 'stock' },
+                { code: 'ENKAI', name: 'Enka İnşaat', price: 42.50, type: 'stock' },
+                { code: 'DOHOL', name: 'Doğan Holding', price: 15.70, type: 'stock' },
+                { code: 'AEFES', name: 'Anadolu Efes', price: 210.90, type: 'stock' },
+                { code: 'CCOLA', name: 'Coca-Cola İçecek', price: 750.00, type: 'stock' },
+                { code: 'OTKAR', name: 'Otokar', price: 650.25, type: 'stock' },
+                { code: 'KRDMD', name: 'Kardemir (D)', price: 28.90, type: 'stock' },
+                { code: 'EKGYO', name: 'Emlak Konut GYO', price: 9.80, type: 'stock' },
+                { code: 'HALKB', name: 'Halkbank', price: 18.20, type: 'stock' },
+                { code: 'VAKBN', name: 'Vakıfbank', price: 21.50, type: 'stock' },
+                { code: 'ISGYO', name: 'İş GYO', price: 20.40, type: 'stock' },
+                { code: 'TRGYO', name: 'Torunlar GYO', price: 45.60, type: 'stock' },
+                { code: 'ZOREN', name: 'Zorlu Enerji', price: 5.80, type: 'stock' },
+                { code: 'AKSEN', name: 'Aksa Enerji', price: 48.30, type: 'stock' },
+                { code: 'AYDEM', name: 'Aydem Enerji', price: 30.15, type: 'stock' },
+                { code: 'ODAS', name: 'Odaş Elektrik', price: 11.25, type: 'stock' },
+                { code: 'ASTOR', name: 'Astor Enerji', price: 102.70, type: 'stock' },
+                { code: 'CWENE', name: 'CW Enerji', price: 295.50, type: 'stock' },
+                { code: 'GESAN', name: 'Girişim Elektrik', price: 85.40, type: 'stock' },
+                { code: 'KMPUR', name: 'Kimpur', price: 77.60, type: 'stock' },
+                { code: 'IPEKE', name: 'İpek Enerji', price: 45.90, type: 'stock' },
+                { code: 'KOZAA', name: 'Koza Anadolu', price: 55.10, type: 'stock' },
+            ];
+
+            // --- Onboarding Logic ---
+            const onboardingTitles = ["Hesap Oluştur", "Yasal Bilgiler", "Yatırım Hedefleri", "Finansal Durum", "Portföy Analizi", "Önerilen Portföy", "Banka Bağla"];
+
+            function showOnboardingStep(step) {
+                currentOnboardingStep = step;
+                document.querySelectorAll('.onboarding-step').forEach(s => s.classList.add('hidden'));
+                const currentStepElement = document.getElementById(`step-${step}`);
+                if (currentStepElement) {
+                    currentStepElement.classList.remove('hidden');
+                }
+                document.getElementById('onboarding-title').textContent = onboardingTitles[step - 1];
+                
+                const indicatorsContainer = document.getElementById('step-indicators');
+                indicatorsContainer.innerHTML = '';
+                const stepWidth = 100 / totalOnboardingSteps;
+                for (let i = 1; i <= totalOnboardingSteps; i++) {
+                    const div = document.createElement('div');
+                    div.className = `step-indicator ${i <= step ? 'active' : ''}`;
+                    div.style.width = `${stepWidth}%`;
+                    indicatorsContainer.appendChild(div);
+                }
+
+                document.getElementById('onboarding-back-btn').style.visibility = step === 1 ? 'hidden' : 'visible';
+                const nextBtn = document.getElementById('onboarding-next-btn');
+                nextBtn.style.display = 'block';
+                if (step >= totalOnboardingSteps - 1) { 
+                     nextBtn.style.display = 'none';
+                }
+            }
+
+            function validateAndNextStep() {
+                 if (currentOnboardingStep === 1) {
+                    const password = document.getElementById('reg-password').value;
+                    if (!password || password.length < 8) {
+                        showNotification("Şifre en az 8 karakter olmalıdır.", "error");
+                        return;
+                    }
+                }
+                 if (currentOnboardingStep < totalOnboardingSteps) {
+                    showOnboardingStep(currentOnboardingStep + 1);
+                    if (currentOnboardingStep === totalOnboardingSteps - 2) { // Analysis step
+                        analyzeAndRecommendPortfolio();
+                        setTimeout(() => {
+                            showOnboardingStep(currentOnboardingStep + 1); // Go to Recommendation step
+                             setTimeout(() => {
+                                showOnboardingStep(currentOnboardingStep + 1); // Go to Bank Link step
+                            }, 3000);
+                        }, 2500);
+                    }
+                }
+            }
+
+            function prevOnboardingStep() {
+                if (currentOnboardingStep > 1) {
+                    showOnboardingStep(currentOnboardingStep - 1);
+                } else {
+                     onboardingFlow.classList.remove('flex');
+                     onboardingFlow.classList.add('hidden');
+                     authScreen.classList.remove('hidden');
+                }
+            }
+            
+            function analyzeAndRecommendPortfolio() {
+                const goal = document.querySelector('#goal-options .selected')?.dataset.value || 'balanced';
+                let recommendedPortfolio = [];
+
+                if (goal === 'growth') {
+                    recommendedPortfolio = [
+                        { code: 'FROTO', allocation: 30 }, 
+                        { code: 'ASELS', allocation: 30 }, 
+                        { code: 'PGSUS', allocation: 25 }, 
+                        { code: 'SASA', allocation: 15 }
+                    ];
+                } else if (goal === 'balanced') {
+                    recommendedPortfolio = [
+                        { code: 'KCHOL', allocation: 25 }, 
+                        { code: 'GARAN', allocation: 20 }, 
+                        { code: 'SISE', allocation: 20 }, 
+                        { code: 'EREGL', allocation: 20 }, 
+                        { code: 'USD/TRY', allocation: 15 }
+                    ];
+                } else { // conservative
+                    recommendedPortfolio = [
+                        { code: 'BIMAS', allocation: 40 }, 
+                        { code: 'USD/TRY', allocation: 30 }, 
+                        { code: 'ULKER', allocation: 20 },
+                        { code: 'MGROS', allocation: 10 }
+                    ];
+                }
+                userState.autoInvestList = recommendedPortfolio;
+                renderRecommendation(recommendedPortfolio);
+            }
+            
+            function renderRecommendation(portfolio) {
+                const ctx = document.getElementById('recommendation-chart').getContext('2d');
+                const detailsDiv = document.getElementById('recommendation-details');
+                detailsDiv.innerHTML = '';
+
+                const labels = portfolio.map(p => p.code);
+                const data = portfolio.map(p => p.allocation);
+                const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#6366F1'];
+
+                if (recommendationChart) recommendationChart.destroy();
+                recommendationChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{ data: data, backgroundColor: colors.slice(0, data.length), borderWidth: 0 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } } }
+                });
+
+                portfolio.forEach((item, index) => {
+                    const colorIndex = index % colors.length;
+                    detailsDiv.innerHTML += `<div class="flex justify-center items-center"><div class="w-4 h-4 rounded-full mr-2" style="background-color: ${colors[colorIndex]}"></div><span>${item.code}: %${item.allocation}</span></div>`;
+                });
+            }
+
+            // --- Giriş & Kayıt ---
+            function createDefaultState(email) {
+                return {
+                    email: email, roundingRule: 5, digitalPiggyBank: 0,
+                    portfolio: {}, autoInvestList: [], transactionHistory: [],
+                    recurringInvestment: { active: false, amount: 0 }
+                };
+            }
+
+            const handleLogin = (email) => {
+                if (!email || !/^\S+@\S+\.\S+$/.test(email)) { 
+                    showNotification("Lütfen geçerli bir e-posta adresi girin.", "error"); 
+                    return; 
+                }
+                userState = createDefaultState(email);
+                authScreen.classList.add('hidden');
+                startApp();
+            };
+            
+            const handleRegisterFlow = () => {
+                const email = document.getElementById('login-email').value;
+                if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+                    showNotification("Lütfen geçerli bir e-posta adresi girin.", "error");
+                    return;
+                }
+                userState = createDefaultState(email);
+                authScreen.classList.add('hidden');
+                onboardingFlow.classList.add('flex');
+                onboardingFlow.classList.remove('hidden');
+                showOnboardingStep(1);
+            };
+
+            const startApp = () => {
+                onboardingFlow.classList.remove('flex');
+                onboardingFlow.classList.add('hidden');
+                appContainer.classList.add('flex');
+                appContainer.classList.remove('hidden');
+                setupAppForUser(userState);
+            }
+
+            function setupAppForUser(state) {
+                document.getElementById('welcome-message').textContent = `Hoş geldin, ${state.email.split('@')[0]}!`;
+                updateUI(state);
+                setupStockMarket();
+            }
+
+            // --- UI Güncelleme ---
+            function updateUI(state) {
+                const { currentValue, totalCost } = calculatePortfolioValue(state.portfolio);
+                const totalAssets = currentValue;
+                const gainLoss = currentValue - totalCost;
+                const gainLossPercent = totalCost > 0 ? (gainLoss / totalCost) * 100 : 0;
+                
+                document.getElementById('total-assets').textContent = `${totalAssets.toFixed(2)} TL`;
+                const perfEl = document.getElementById('portfolio-performance');
+                perfEl.textContent = `Tüm Zamanlar: ${gainLoss.toFixed(2)} TL (${gainLossPercent.toFixed(2)}%)`;
+                perfEl.className = `text-sm font-medium ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`;
+                
+                document.getElementById('rounding-options').value = state.roundingRule;
+                
+                if (!isAllocationEditing) {
+                    renderAllocationSettings();
+                }
+                renderPortfolio(state.portfolio);
+                renderRecentTransactionHistory(state.transactionHistory);
+            }
+
+            // --- Otomatik Yatırım & Dağılım ---
+            function renderAllocationSettings() {
+                const container = document.getElementById('allocation-settings');
+                const actionsContainer = document.getElementById('allocation-actions');
+                container.innerHTML = '';
+                actionsContainer.innerHTML = '';
+                
+                const editIcon = document.getElementById('edit-icon');
+
+                if (userState.autoInvestList.length === 0) {
+                    container.innerHTML = '<p class="text-sm text-gray-500">Hedef seçilmedi. Borsa ekranından ekleyebilirsiniz.</p>';
+                    editIcon.style.display = 'none';
+                    return;
+                }
+
+                editIcon.style.display = 'block';
+
+                userState.autoInvestList.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center justify-between';
+                    div.innerHTML = `
+                        <label for="alloc-${item.code}" class="font-medium">${item.code}</label>
+                        <div class="flex items-center w-24">
+                            <input type="number" id="alloc-${item.code}" value="${item.allocation}" class="allocation-input w-full p-1 border border-transparent rounded-md" disabled>
+                            <span class="ml-1 font-semibold">%</span>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            function startEditingAllocations() {
+                if (isAllocationEditing) return;
+                isAllocationEditing = true;
+
+                const inputs = document.querySelectorAll('.allocation-input');
+                const actionsContainer = document.getElementById('allocation-actions');
+                const editIcon = document.getElementById('edit-icon');
+                
+                editIcon.style.display = 'none';
+                inputs.forEach(input => {
+                    input.disabled = false;
+                    input.classList.add('border-gray-300');
+                    input.classList.remove('border-transparent');
+                });
+
+                actionsContainer.innerHTML = `
+                    <button id="save-alloc-btn" class="w-full py-2 bg-green-600 text-white rounded-md font-semibold" disabled>Kaydet (Toplam %100 Olmalı)</button>
+                    <button id="cancel-alloc-btn" class="w-full py-2 bg-gray-500 text-white rounded-md font-semibold">İptal</button>
+                `;
+                document.getElementById('save-alloc-btn').onclick = (e) => { e.stopPropagation(); saveAllocations(); };
+                document.getElementById('cancel-alloc-btn').onclick = (e) => { 
+                    e.stopPropagation();
+                    isAllocationEditing = false;
+                    renderAllocationSettings();
+                };
+                inputs.forEach(input => input.addEventListener('input', validateAllocationTotal));
+                validateAllocationTotal();
+            }
+
+            function validateAllocationTotal() {
+                const inputs = document.querySelectorAll('.allocation-input');
+                let total = 0;
+                inputs.forEach(input => {
+                    total += parseFloat(input.value) || 0;
+                });
+                const saveBtn = document.getElementById('save-alloc-btn');
+                if (Math.round(total) === 100) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Kaydet';
+                } else {
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = `Toplam: %${total.toFixed(0)}`;
+                }
+            }
+            
+            function saveAllocations() {
+                const inputs = document.querySelectorAll('.allocation-input');
+                inputs.forEach(input => {
+                    const code = input.id.split('-')[1];
+                    const stock = userState.autoInvestList.find(s => s.code === code);
+                    if (stock) {
+                        stock.allocation = parseFloat(input.value) || 0;
+                    }
+                });
+                isAllocationEditing = false;
+                renderAllocationSettings();
+                showNotification('Dağılım kaydedildi!', 'success');
+                investCashBalance();
+            }
+
+            function rebalanceAllocations() {
+                const count = userState.autoInvestList.length;
+                if (count === 0) return;
+                const share = 100 / count;
+                let total = 0;
+                userState.autoInvestList.forEach((item, index) => {
+                    if (index < count - 1) {
+                        const alloc = Math.floor(share);
+                        item.allocation = alloc;
+                        total += alloc;
+                    } else {
+                        item.allocation = 100 - total;
+                    }
+                });
+            }
+
+            // --- Diğer Fonksiyonlar ---
+            function renderPortfolio(portfolio) {
+                const container = document.getElementById('portfolio-details');
+                container.innerHTML = '';
+                const keys = Object.keys(portfolio);
+                if (keys.length === 0) {
+                    container.innerHTML = '<p class="text-sm text-gray-500">Henüz yatırımınız bulunmuyor.</p>';
+                    return;
+                }
+                keys.forEach(key => {
+                    const value = portfolio[key];
+                    const stock = mockStocks.find(s => s.code === key);
+                    const currentValue = key === 'Nakit' ? value.lot : (stock ? stock.price : 0) * value.lot;
+                    const lotText = key === 'Nakit' ? '' : `<p class="text-xs text-gray-600">${value.lot.toFixed(4)} lot</p>`;
+
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'flex justify-between items-center bg-gray-50 p-2 rounded-md';
+                    itemDiv.innerHTML = `<div><p class="font-semibold">${key}</p>${lotText}</div><span class="font-medium">${currentValue.toFixed(2)} TL</span>`;
+                    container.appendChild(itemDiv);
+                });
+            }
+            
+            function calculatePortfolioValue(portfolio) {
+                let currentValue = 0;
+                let totalCost = 0;
+                if (!portfolio) return { currentValue: 0, totalCost: 0 };
+                Object.keys(portfolio).forEach(key => {
+                    const stock = mockStocks.find(s => s.code === key);
+                    const stockPrice = key === 'Nakit' ? 1 : (stock ? stock.price : 0);
+                    currentValue += portfolio[key].lot * stockPrice;
+                    totalCost += portfolio[key].cost;
+                });
+                return { currentValue, totalCost };
+            }
+
+            function renderRecentTransactionHistory(history) {
+                const container = document.getElementById('recent-transaction-history');
+                renderTransactionList(container, history, 3);
+            }
+            
+            function renderFullTransactionHistory(history) {
+                const container = document.getElementById('full-transaction-history');
+                renderTransactionList(container, history);
+            }
+
+            function renderTransactionList(container, history, limit) {
+                container.innerHTML = '';
+                if (history.length === 0) {
+                    container.innerHTML = '<p class="text-sm text-gray-500 text-center">Henüz bir hareket yok.</p>';
+                    return;
+                }
+                
+                const itemsToShow = limit ? [...history].reverse().slice(0, limit) : [...history].reverse();
+
+                itemsToShow.forEach(tx => {
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between items-center bg-gray-50 p-2 rounded-md';
+                    const amountClass = tx.type === 'round-up' ? 'text-green-600' : 'text-blue-600';
+                    const sign = '+';
+
+                    div.innerHTML = `
+                        <div>
+                            <p class="font-medium text-sm">${tx.description}</p>
+                            <p class="text-xs text-gray-500">${tx.date.toLocaleTimeString('tr-TR')}</p>
+                        </div>
+                        <span class="font-semibold ${amountClass}">${sign}${tx.amount.toFixed(2)} TL</span>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            function executeAutoInvestment(amountToInvest, source = 'Yuvarlama') {
+                userState.transactionHistory.push({
+                    description: `${source} ile Yatırım`,
+                    amount: amountToInvest,
+                    date: new Date(),
+                    type: 'investment'
+                });
+
+                const totalAlloc = userState.autoInvestList.reduce((sum, item) => sum + item.allocation, 0);
+                if (userState.autoInvestList.length === 0 || Math.round(totalAlloc) !== 100) {
+                    showNotification(`${amountToInvest.toFixed(2)} TL nakit olarak eklendi (Hedef Belirlenmedi).`, 'info');
+                    if (!userState.portfolio['Nakit']) {
+                        userState.portfolio['Nakit'] = { lot: 0, cost: 0 };
+                    }
+                    userState.portfolio['Nakit'].lot += amountToInvest;
+                    userState.portfolio['Nakit'].cost += amountToInvest;
+                    return;
+                }
+                
+                userState.autoInvestList.forEach(item => {
+                    const stock = mockStocks.find(s => s.code === item.code);
+                    if (!stock) return;
+                    const investmentAmount = amountToInvest * (item.allocation / 100);
+                    const lotsToBuy = investmentAmount / stock.price;
+                    if (!userState.portfolio[item.code]) {
+                        userState.portfolio[item.code] = { lot: 0, cost: 0 };
+                    }
+                    userState.portfolio[item.code].lot += lotsToBuy;
+                    userState.portfolio[item.code].cost += investmentAmount;
+                });
+                showNotification(`${amountToInvest.toFixed(2)} TL, yatırım hedeflerinize dağıtıldı.`, 'success');
+            }
+            
+            function investCashBalance() {
+                const cashPortfolio = userState.portfolio['Nakit'];
+                if (!cashPortfolio || cashPortfolio.lot <= 0) return;
+                
+                const cashToInvest = cashPortfolio.lot;
+                cashPortfolio.lot = 0;
+                cashPortfolio.cost = 0;
+                delete userState.portfolio['Nakit'];
+
+                executeAutoInvestment(cashToInvest, 'Nakit Yatırımı');
+            }
+
+            function setupStockMarket() {
+                if(stockInterval) clearInterval(stockInterval);
+                stockInterval = setInterval(() => {
+                    mockStocks.forEach(stock => {
+                        const changePercent = (Math.random() - 0.5) * (stock.type === 'fx' ? 0.005 : 0.05);
+                        stock.price *= (1 + changePercent);
+                    });
+                    if (document.getElementById('borsa-screen').offsetParent !== null) renderStocks();
+                    if(document.getElementById('panel-screen').offsetParent !== null) updateUI(userState);
+                    if (!stockDetailModal.classList.contains('hidden') && currentModalStock) {
+                        const updatedStock = mockStocks.find(s => s.code === currentModalStock.code);
+                        document.getElementById('modal-stock-price').textContent = `${updatedStock.price.toFixed(2)} TL`;
+                    }
+                }, 2000);
+            }
+
+            function toggleAutoInvest(stockCode) {
+                const index = userState.autoInvestList.findIndex(s => s.code === stockCode);
+                if (index > -1) {
+                    userState.autoInvestList.splice(index, 1);
+                } else {
+                    userState.autoInvestList.push({ code: stockCode, allocation: 0 });
+                }
+                rebalanceAllocations();
+                renderStocks();
+                renderAllocationSettings();
+                investCashBalance();
+            }
+
+            function renderStocks() {
+                const stockListDiv = document.getElementById('stock-list');
+                if(!stockListDiv) return;
+                stockListDiv.innerHTML = '';
+                mockStocks.forEach(stock => {
+                    const isInList = userState.autoInvestList.some(s => s.code === stock.code);
+                    const stockDiv = document.createElement('div');
+                    stockDiv.className = 'flex justify-between items-center p-3 rounded-lg hover:bg-gray-100 stock-item-clickable';
+                    stockDiv.dataset.stockCode = stock.code; // Tıklama için veri
+                    stockDiv.innerHTML = `
+                        <div class="flex-1 pointer-events-none"><p class="font-semibold">${stock.code}</p><p class="text-xs text-gray-500">${stock.name}</p></div>
+                        <div class="w-24 text-center pointer-events-none"><p class="font-medium">${stock.price.toFixed(2)} TL</p></div>
+                        <div class="w-24 text-right">
+                             <button class="stock-add-btn text-xs font-semibold py-1 px-2 rounded-full ${isInList ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}">
+                                ${isInList ? 'Çıkar' : 'Ekle'}
+                            </button>
+                        </div>`;
+                    stockDiv.querySelector('.stock-add-btn').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        toggleAutoInvest(stock.code);
+                    });
+                    stockListDiv.appendChild(stockDiv);
+                });
+            }
+
+            // --- YENİ: Grafik ve Modal Fonksiyonları ---
+
+            function generateSimulatedChartData(currentPrice, period) {
+                let data = [];
+                let labels = [];
+                let pointCount;
+                let timeStep;
+
+                switch (period) {
+                    case '1M': pointCount = 30; timeStep = 1; break; // 30 gün
+                    case '1Y': pointCount = 12; timeStep = 30; break; // 12 ay
+                    case '5Y': pointCount = 60; timeStep = 30; break; // 60 ay
+                    case 'ALL': pointCount = 120; timeStep = 30; break; // 10 yıl
+                }
+
+                let price = currentPrice / (1 + (Math.random() - 0.5) * 0.2); // Geçmişte başlasın
+                for (let i = pointCount; i > 0; i--) {
+                    data.unshift(price);
+                    const date = new Date();
+                    if (period === '1Y' || period === '5Y' || period === 'ALL') {
+                        date.setMonth(date.getMonth() - (pointCount - i));
+                        labels.unshift(date.toLocaleDateString('tr-TR', { month: 'short', year: '2-digit'}));
+                    } else {
+                        date.setDate(date.getDate() - (pointCount - i));
+                        labels.unshift(date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short'}));
+                    }
+                    price *= (1 + (Math.random() - 0.48) * 0.05); // Hafif yukarı trendli rastgele değişim
+                }
+                data[data.length - 1] = currentPrice; // Son nokta anlık fiyat olsun
+
+                return { labels, data };
+            }
+
+            function renderStockChart(stock, period) {
+                const ctx = document.getElementById('stock-history-chart').getContext('2d');
+                const { labels, data } = generateSimulatedChartData(stock.price, period);
+                
+                if (stockHistoryChart) {
+                    stockHistoryChart.destroy();
+                }
+
+                stockHistoryChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Fiyat (TL)',
+                            data: data,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.1,
+                            fill: true,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { display: true, ticks: { maxTicksLimit: 6 } },
+                            y: { display: true }
+                        }
+                    }
+                });
+            }
+            
+            function showStockDetailModal(stockCode) {
+                currentModalStock = mockStocks.find(s => s.code === stockCode);
+                if (!currentModalStock) return;
+
+                document.getElementById('modal-stock-code').textContent = currentModalStock.code;
+                document.getElementById('modal-stock-name').textContent = currentModalStock.name;
+                document.getElementById('modal-stock-price').textContent = `${currentModalStock.price.toFixed(2)} TL`;
+                
+                renderStockChart(currentModalStock, '1Y');
+
+                document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelector('.period-btn[data-period="1Y"]').classList.add('active');
+
+                stockDetailModal.classList.remove('hidden');
+            }
+
+            function hideStockDetailModal() {
+                stockDetailModal.classList.add('hidden');
+                if (stockHistoryChart) {
+                    stockHistoryChart.destroy();
+                    stockHistoryChart = null;
+                }
+                currentModalStock = null;
+            }
+            
+            function showNotification(message, type = 'success') {
+                const banner = document.getElementById('notification-banner');
+                const messageP = document.getElementById('notification-message');
+                const color = type === 'success' ? 'bg-green-500' : (type === 'error' ? 'bg-red-500' : 'bg-blue-500');
+                banner.className = `notification ${color} text-white text-sm font-bold px-4 py-3 rounded-lg shadow-lg`;
+                messageP.textContent = message;
+                banner.classList.add('show');
+                setTimeout(() => { banner.classList.remove('show'); }, 3000);
+            }
+            
+            // --- Event Listeners ---
+            function initializeEventListeners() {
+                document.body.addEventListener('click', function(e) {
+                    const target = e.target;
+                    
+                    if (target.matches('#login-button')) handleLogin(document.getElementById('login-email').value);
+                    if (target.matches('#show-register-flow')) { e.preventDefault(); handleRegisterFlow(); }
+                    if (target.matches('#onboarding-next-btn')) validateAndNextStep();
+                    if (target.matches('#onboarding-back-btn')) prevOnboardingStep();
+                    if (target.matches('#connect-bank-btn')) startApp();
+                    if (target.closest('.option-card')) {
+                        const parent = target.closest('.option-card').parentElement;
+                        parent.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+                        target.closest('.option-card').classList.add('selected');
+                    }
+                    if (target.matches('#logout-button')) window.location.reload();
+                    if (target.matches('#add-expense-btn')) {
+                        const amount = parseFloat(document.getElementById('sim-expense').value);
+                        if(isNaN(amount) || amount <= 0) return;
+                        const roundingRule = userState.roundingRule;
+                        let roundedAmount = Math.ceil(amount / roundingRule) * roundingRule;
+                        if (amount === roundedAmount) roundedAmount += roundingRule;
+                        const savedAmount = roundedAmount - amount;
+                        
+                        executeAutoInvestment(savedAmount, 'Yuvarlama');
+                        
+                        updateUI(userState);
+                        document.getElementById('sim-expense').value = '';
+                    }
+                    if (target.matches('#edit-icon')) {
+                        e.stopPropagation();
+                        if (!isAllocationEditing && userState.autoInvestList.length > 0) {
+                            startEditingAllocations();
+                        }
+                    }
+                    if (target.matches('#set-recurring-btn')) {
+                        const amount = parseFloat(document.getElementById('recurring-amount').value);
+                        if (isNaN(amount) || amount <= 0) {
+                            showNotification("Lütfen geçerli bir haftalık yatırım tutarı girin.", "error");
+                            return;
+                        }
+                        executeAutoInvestment(amount, 'Haftalık Yatırım');
+                        updateUI(userState);
+                        showNotification(`Haftalık yatırım ${amount} TL olarak ayarlandı.`, "success");
+                    }
+                    if (target.closest('.nav-item')) {
+                        e.preventDefault();
+                        const navItem = target.closest('.nav-item');
+                        const targetId = navItem.dataset.target;
+                        const targetTitle = navItem.dataset.title;
+                        document.querySelectorAll('main > div').forEach(s => s.classList.add('hidden'));
+                        document.getElementById(targetId)?.classList.remove('hidden');
+                        document.getElementById('header-title').textContent = targetTitle;
+                        document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+                        navItem.classList.add('active');
+                        if(targetId === 'borsa-screen') renderStocks();
+                        if(targetId === 'history-screen') renderFullTransactionHistory(userState.transactionHistory);
+                    }
+                    // YENİ: Modal event'leri
+                    if (target.closest('.stock-item-clickable')) {
+                        const stockCode = target.closest('.stock-item-clickable').dataset.stockCode;
+                        showStockDetailModal(stockCode);
+                    }
+                    if (target.matches('#modal-close-btn')) {
+                        hideStockDetailModal();
+                    }
+                    if (target.closest('.period-btn')) {
+                        const period = target.closest('.period-btn').dataset.period;
+                        if (currentModalStock) {
+                            renderStockChart(currentModalStock, period);
+                            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+                            target.closest('.period-btn').classList.add('active');
+                        }
+                    }
+                });
+
+                document.getElementById('rounding-options').addEventListener('change', (e) => {
+                     userState.roundingRule = parseInt(e.target.value);
+                     showNotification(`Yuvarlama kuralı "${e.target.options[e.target.selectedIndex].text}" olarak değiştirildi.`, 'success');
+                });
+            }
+
+            initializeEventListeners();
+        });
+    </script>
+</body>
+</html>
